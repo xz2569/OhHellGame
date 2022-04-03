@@ -464,10 +464,12 @@ io.on("connection", (socket) => {
       if (played_suit === curr_winning_suit) {
         if (played_rank > curr_winning_rank) {
           rooms[data.room].currentTrickWinner = data.username;
+          rooms[data.room].currentTrickWinningCard = data.cardPlayed;
         }
       } else {
         if (played_suit === rooms[data.room].currentRoundTrumpSuit) {
           rooms[data.room].currentTrickWinner = data.username;
+          rooms[data.room].currentTrickWinningCard = data.cardPlayed;
         }
       }
       console.log(`winner is ${rooms[data.room].currentTrickWinner}`);
