@@ -90,7 +90,6 @@ const addPlayerToRoom = (data, socket) => {
   }
 };
 
-// to-do
 const reconnectToGame = (data, socket) => {
   // show game (skip join room page)
   socket.emit("show_game");
@@ -102,7 +101,11 @@ const reconnectToGame = (data, socket) => {
   broadcastPlayersInfo(data.room, rooms[data.room].currentRoundNumTricks === 1);
 
   // send cards in your hand
-  socket.emit("deal_card", rooms[data.room][data.username].cardsInHand);
+  if (rooms[data.room].currentRoundNumTricks === 1) {
+    socket.emit("deal_card", ["back"]);
+  } else {
+    socket.emit("deal_card", rooms[data.room][data.username].cardsInHand);
+  }
 
   // send trump card
   rooms[data.room][data.username].socket.emit(
@@ -347,7 +350,9 @@ io.on("connection", (socket) => {
     } catch (e) {}
     addPlayerToRoom(data, socket);
     socket.emit("room_joined", data.username);
-    broadcastPlayers(data.room);
+    if (!rooms[data.room].gameStarted) {
+      broadcastPlayers(data.room);
+    }
   });
 
   socket.on("disconnect", () => {
