@@ -1,11 +1,9 @@
-const cors = require("cors");
 const express = require("express");
 const app = express();
 
 /* the following server code is for DEPLOYMENT */
 // in client folder, run `npm run build`
-// copy everything in client/build to server/public
-app.use(express.static("public"));
+app.use(express.static("client/build"));
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT);
 const io = require("socket.io")(server);
