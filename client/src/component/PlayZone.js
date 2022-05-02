@@ -28,6 +28,7 @@ const PlayZone = ({
           )}
           playing={true}
           cardPlayed={playerInfo[round].cardPlayed}
+          prevCardPlayed={playerInfo[round].prevCardPlayed}
           leading={leadingPlayer === playerInfo.username}
         />
       ))}

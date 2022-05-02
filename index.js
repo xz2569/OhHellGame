@@ -10,14 +10,10 @@ const io = require("socket.io")(server);
 
 /* the following server code is for LOCAL TESTING  */
 // const cors = require("cors");
-// const express = require("express");
 // const http = require("http");
 // const { Server } = require("socket.io");
-
 // app.use(cors());
-
 // const server = http.createServer(app);
-
 // const io = new Server(server, {
 //   cors: {
 //     // origin: "http://192.168.1.73:3000",
@@ -25,14 +21,15 @@ const io = require("socket.io")(server);
 //     method: ["GET", "POST"],
 //   },
 // });
-
 // server.listen(3001, () => {
 //   console.log("started server");
 // });
 
 var thisRoundJustFinished = false;
 var rooms = {};
-var waitTimeBetweenTricks = 4000;
+var socketIdMapUser = {};
+var waitTimeBetweenTricks = 3000;
+var waitTimeBetweenRounds = 3000;
 
 const suits = ["C", "D", "H", "S"];
 const ranks = [
@@ -78,12 +75,26 @@ const addPlayerToRoom = (data, socket) => {
     rooms[data.room].players.push(data.username);
     rooms[data.room][data.username] = {
       socket: socket,
+      passcode: data.passcode,
       cardsInHand: [],
+      connected: true,
     };
+    socket.emit("room_joined", data.username);
   } else {
     if (rooms[data.room].players.indexOf(data.username) !== -1) {
       console.log("reconnecting .....");
-      reconnectToGame(data, socket);
+      if (
+        rooms[data.room][data.username].connected === false &&
+        rooms[data.room][data.username].passcode == data.passcode
+      ) {
+        reconnectToGame(data, socket);
+        socket.emit("room_joined", data.username);
+      } else {
+        socket.emit(
+          "connection_error",
+          "ERROR: you are still connected or wrong passcode"
+        );
+      }
     }
   }
 };
@@ -92,8 +103,9 @@ const reconnectToGame = (data, socket) => {
   // show game (skip join room page)
   socket.emit("show_game");
 
-  // update the socket
+  // update the socket and connection status
   rooms[data.room][data.username].socket = socket;
+  rooms[data.room][data.username].connected = true;
 
   // broadcastPlayersInfo
   broadcastPlayersInfo(data.room, rooms[data.room].currentRoundNumTricks === 1);
@@ -183,7 +195,7 @@ const initRoom = (room) => {
   rooms[room].lastMessage = "";
   rooms[room].numPlayers = rooms[room].players.length;
   rooms[room].maxTrickPerRound = Math.min(
-    8,
+    1,
     Math.floor(51 / rooms[room].numPlayers)
   );
   rooms[room].currentRound = 1;
@@ -211,6 +223,7 @@ const initRoom = (room) => {
       username: player,
       avatarId: index + 1,
       [rooms[room].currentRound]: {
+        prevCardPlayed: "",
         cardPlayed: "",
         guess: -1,
         made: 0,
@@ -284,13 +297,13 @@ const collectOneGuess = (room) => {
     rooms[room].lastMessage =
       `Starting round ${rooms[room].currentRound}` +
       ` ... ` +
-      `Player ${username} is guessing`;
+      `${username} is guessing`;
     // leader of the trick
     if (rooms[room].numGuessSubmitted === 0) {
       io.sockets.to(room).emit("leading_player", username);
     }
   } else {
-    rooms[room].lastMessage = `Player ${username} is guessing`;
+    rooms[room].lastMessage = `${username} is guessing`;
   }
 
   io.sockets.to(room).emit("message", rooms[room].lastMessage);
@@ -322,7 +335,7 @@ const collectOnePlayedCard = (room) => {
   }
 
   // broadcast current player to all players
-  rooms[room].lastMessage = `player ${username} is playing`;
+  rooms[room].lastMessage = `${username} is playing`;
   io.sockets.to(room).emit("message", rooms[room].lastMessage);
   io.sockets.to(room).emit("playing_player", username);
 
@@ -346,8 +359,13 @@ io.on("connection", (socket) => {
         }
       }
     } catch (e) {}
+    // store which user and room this socket is for
+    socketIdMapUser[socket.id] = {
+      username: data.username,
+      room: data.room,
+    };
+    // add player to room
     addPlayerToRoom(data, socket);
-    socket.emit("room_joined", data.username);
     if (!rooms[data.room].gameStarted) {
       broadcastPlayers(data.room);
     }
@@ -355,6 +373,16 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(socket.id, "disconnected");
+    if (socket.id in socketIdMapUser) {
+      var username = socketIdMapUser[socket.id].username;
+      var room = socketIdMapUser[socket.id].room;
+      rooms[room][username].connected = false;
+      console.log(`player ${username} disconnected from room ${room}`);
+      rooms[room].players = rooms[room].players.filter(
+        (player) => player !== username
+      );
+      broadcastPlayers(room);
+    }
   });
 
   socket.on("start_game", (room) => {
@@ -494,9 +522,10 @@ io.on("connection", (socket) => {
       rooms[data.room].currentTrickSuit = "";
 
       // broadcast winner to all players
-      rooms[data.room].lastMessage = `player ${
+      await delay(500);
+      rooms[data.room].lastMessage = `Winner is ${
         rooms[data.room].currentTrickWinner
-      } won`;
+      }`;
       io.sockets.to(data.room).emit("message", rooms[data.room].lastMessage);
 
       io.sockets
@@ -535,6 +564,8 @@ io.on("connection", (socket) => {
 
       // (3) reset players' played card and broadcast
       rooms[data.room].playersInfo.forEach((playerInfo) => {
+        playerInfo[rooms[data.room].currentRound].prevCardPlayed =
+          playerInfo[rooms[data.room].currentRound].cardPlayed;
         playerInfo[rooms[data.room].currentRound].cardPlayed = "";
       });
       broadcastPlayersInfo(data.room, false);
@@ -575,6 +606,7 @@ io.on("connection", (socket) => {
         // update playersInfo for next round and broadcast to all
         rooms[data.room].playersInfo.forEach((playerInfo) => {
           playerInfo[rooms[data.room].currentRound] = {
+            prevCardPlayed: "",
             cardPlayed: "",
             guess: -1,
             made: 0,
@@ -588,6 +620,9 @@ io.on("connection", (socket) => {
           rooms[data.room].currentRound <=
           rooms[data.room].maxTrickPerRound * 2
         ) {
+          io.sockets.to(data.room).emit("end_of_round");
+          await delay(waitTimeBetweenRounds);
+          io.sockets.to(data.room).emit("staring_new_round");
           dealCards(data.room);
         } else {
           console.log("finished!");
@@ -595,6 +630,7 @@ io.on("connection", (socket) => {
           io.sockets
             .to(data.room)
             .emit("message", rooms[data.room].lastMessage);
+          io.sockets.to(data.room).emit("end_of_game");
         }
       }
     }

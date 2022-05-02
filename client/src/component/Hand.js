@@ -19,7 +19,7 @@ const Hand = ({ cards, myTurn, onClick, currentSuit }) => {
             className={`${index === 0 ? "card-first" : "card-middle"} ${
               index === cards.length - 1 ? "card-last" : "card-middle"
             }`}
-            style={{ padding: "5px", maxWidth: "135px" }}
+            style={{ padding: "5px", maxWidth: "115px" }}
           >
             <Card.Img
               style={{

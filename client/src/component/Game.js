@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import PlayZone from "./PlayZone";
 import Hand from "./Hand";
-import Guess from "./Guess";
+import GuessInfo from "./GuessInfo";
 import Message from "./Message";
 import ScoreTable from "./ScoreTable";
 import TrumpCard from "./TrumpCard";
 import DetailedScoreBoard from "./DetailedScoreBoard";
+import SubmitGuess from "./SubmitGuess";
 import { Container, Row, Col } from "react-bootstrap";
 import { FaCheck, FaQuestion, FaTimes, FaBan } from "react-icons/fa";
 
@@ -24,6 +25,9 @@ const Game = ({ socket, username, room }) => {
   const [winningPlayer, setWinningPlayer] = useState("");
   const [leadingPlayer, setLeadingPlayer] = useState("");
   const [modalShow, setModalShow] = useState(false);
+  const [numTricksThisRound, setNumTricksThisRound] = useState(0);
+  const [gameEnded, setGameEnded] = useState(false);
+  const [showGuessInfo, setShowGuessInfo] = useState(true);
 
   const suits = ["C", "D", "S", "H"];
   const ranks = [
@@ -94,7 +98,7 @@ const Game = ({ socket, username, room }) => {
         <FaCheck
           key={`made-good-${i}`}
           size="12px"
-          style={{ color: "green" }}
+          style={{ color: "mediumseagreen" }}
         />
       );
     }
@@ -130,6 +134,7 @@ const Game = ({ socket, username, room }) => {
         return deck.indexOf(card1) - deck.indexOf(card2);
       });
       setMyCards(dataSorted);
+      setNumTricksThisRound(dataSorted.length);
     });
 
     socket.off("trump_card").on("trump_card", (data) => {
@@ -181,6 +186,22 @@ const Game = ({ socket, username, room }) => {
     socket.off("message").on("message", (data) => {
       setMessage(data);
     });
+
+    socket.off("end_of_round").on("end_of_round", () => {
+      setModalShow(true);
+      setShowGuessInfo(false);
+    });
+
+    socket.off("staring_new_round").on("staring_new_round", () => {
+      setModalShow(false);
+      setShowGuessInfo(true);
+    });
+
+    socket.off("end_of_game").on("end_of_game", () => {
+      setModalShow(true);
+      setGameEnded(true);
+      setShowGuessInfo(false);
+    });
   }, [socket]);
 
   return (
@@ -203,17 +224,29 @@ const Game = ({ socket, username, room }) => {
             />
           </Row>
           <Row>
-            <div
-              style={{
-                height: "50px",
-                marginTop: "50px",
-                marginBottom: "50px",
-              }}
-            >
-              {myGuessTurn && (
-                <Guess onChange={onChangeGuess} onSubmit={onSubmitGuess} />
-              )}
-            </div>
+            <SubmitGuess
+              show={myGuessTurn}
+              onChange={onChangeGuess}
+              onSubmit={onSubmitGuess}
+            />
+            <Col sm={2}></Col>
+            <Col sm={8}>
+              <div
+                style={{
+                  height: "50px",
+                  marginTop: "50px",
+                  marginBottom: "50px",
+                }}
+              >
+                <GuessInfo
+                  playersInfo={playersInfo}
+                  round={currentRound}
+                  numTricksThisRound={numTricksThisRound}
+                  show={showGuessInfo}
+                />
+              </div>
+            </Col>
+            <Col sm={2}></Col>
           </Row>
           <Row style={{ height: "175px", margin: "auto" }}>
             <Hand
@@ -229,6 +262,11 @@ const Game = ({ socket, username, room }) => {
         {/* Information Column */}
         <Col sm={1}></Col>
         <Col sm={2} style={{ position: "relative", minHeight: "600px" }}>
+          <Row style={{ height: "10px" }}></Row>
+          <Row>
+            <h3>Room: {room}</h3>
+          </Row>
+          <Row style={{ height: "20px" }}></Row>
           <Row>
             <ScoreTable playersInfo={playersInfo} showDetail={showDetail} />
           </Row>
@@ -250,7 +288,7 @@ const Game = ({ socket, username, room }) => {
         show={modalShow}
         hideDetail={hideDetail}
         playersInfo={playersInfo}
-        currentRound={currentRound}
+        currentRound={gameEnded ? currentRound - 1 : currentRound}
         getGuessAndMade={getGuessAndMade}
       />
     </Container>

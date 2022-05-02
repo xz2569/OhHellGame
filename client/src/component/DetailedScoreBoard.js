@@ -1,4 +1,5 @@
 import { Modal, Table } from "react-bootstrap";
+import React from "react";
 
 const DetailedScoreBoard = ({
   show,
@@ -40,15 +41,15 @@ const DetailedScoreBoard = ({
               <tr key={round + 1}>
                 <td style={{ borderRight: "solid 2px black" }}>{round + 1}</td>
                 {playersInfo.map((playerInfo) => (
-                  <>
-                    <td key={playerInfo.username}>
+                  <React.Fragment key={playerInfo.username}>
+                    <td>
                       {getGuessAndMade(
                         playerInfo[round + 1].guess,
                         playerInfo[round + 1].made
                       )}
                     </td>
                     <td>{playerInfo[round + 1].score}</td>
-                  </>
+                  </React.Fragment>
                 ))}
               </tr>
             ))}

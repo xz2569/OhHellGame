@@ -17,6 +17,7 @@ const Players = ({ players, avatarIds, you }) => {
           footerText={player === you ? "you" : "\u00A0"}
           playing={false}
           cardPlayed={""}
+          prevCardPlayed={""}
           leading={false}
         />
       ))}

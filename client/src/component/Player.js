@@ -1,5 +1,4 @@
 import { Card } from "react-bootstrap";
-import { CSSTransition } from "react-transition-group";
 import { FaCrown } from "react-icons/fa";
 
 const Player = ({
@@ -10,6 +9,7 @@ const Player = ({
   footerText,
   playing,
   cardPlayed,
+  prevCardPlayed,
   leading,
 }) => {
   var borderStyle = "light";
@@ -52,16 +52,20 @@ const Player = ({
       </Card.Body>
       {playing && (
         <Card.Body bg="light" style={{ paddingBottom: "16px" }}>
-          <CSSTransition in={true} timeout={300} classNames="cardPlayed">
+          <Card.Img
+            style={{ maxWidth: "80px" }}
+            src={
+              cardPlayed === "" ? `cards/white.png` : `cards/${cardPlayed}.svg`
+            }
+          />
+          {prevCardPlayed !== "" ? (
             <Card.Img
-              style={{ maxWidth: "80px" }}
-              src={
-                cardPlayed === ""
-                  ? `cards/white.png`
-                  : `cards/${cardPlayed}.svg`
-              }
+              style={{ position: "absolute", left: "30%", height: "20%" }}
+              src={`cards/${prevCardPlayed}.svg`}
             />
-          </CSSTransition>
+          ) : (
+            <></>
+          )}
         </Card.Body>
       )}
     </Card>
