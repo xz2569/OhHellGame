@@ -195,7 +195,7 @@ const initRoom = (room) => {
   rooms[room].lastMessage = "";
   rooms[room].numPlayers = rooms[room].players.length;
   rooms[room].maxTrickPerRound = Math.min(
-    1,
+    8,
     Math.floor(51 / rooms[room].numPlayers)
   );
   rooms[room].currentRound = 1;
