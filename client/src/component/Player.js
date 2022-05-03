@@ -54,6 +54,7 @@ const Player = ({
         <Card.Body bg="light" style={{ paddingBottom: "16px" }}>
           <Card.Img
             style={{ maxWidth: "80px" }}
+            rel="preload"
             src={
               cardPlayed === "" ? `cards/white.png` : `cards/${cardPlayed}.svg`
             }
@@ -61,6 +62,7 @@ const Player = ({
           {prevCardPlayed !== "" ? (
             <Card.Img
               style={{ position: "absolute", left: "30%", height: "20%" }}
+              rel="preload"
               src={`cards/${prevCardPlayed}.svg`}
             />
           ) : (

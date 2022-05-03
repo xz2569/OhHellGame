@@ -53,6 +53,7 @@ const Hand = ({ cards, myTurn, onClick, currentSuit }) => {
                     }
                   : () => {}
               }
+              rel="preload"
               src={`cards/${card}.svg`}
             />
           </Card>

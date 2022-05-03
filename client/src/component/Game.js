@@ -30,21 +30,7 @@ const Game = ({ socket, username, room }) => {
   const [showGuessInfo, setShowGuessInfo] = useState(true);
 
   const suits = ["C", "D", "S", "H"];
-  const ranks = [
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "J",
-    "Q",
-    "K",
-    "A",
-  ];
+  const ranks = "2,3,4,5,6,7,8,9,10,J,Q,K,A".split(",");
   const deck = suits.flatMap((suit) => ranks.map((rank) => rank + suit));
 
   const onClick = (e) => {
@@ -70,6 +56,7 @@ const Game = ({ socket, username, room }) => {
     if (isNaN(guess) || guess === guessForbidden || guess < 0) {
       alert("cannot choose this number!");
     } else {
+      setMyGuessTurn(false);
       socket.emit("submit_guess", {
         username: username,
         room: room,
@@ -144,6 +131,7 @@ const Game = ({ socket, username, room }) => {
 
     socket.off("your_turn_to_guess").on("your_turn_to_guess", (data) => {
       console.log("your turn to guess, but cannot pick: ", data);
+      setGuess(-1);
       setMyGuessTurn(true);
       setGuessForbidden(data);
     });

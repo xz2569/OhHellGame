@@ -25,28 +25,13 @@ const io = require("socket.io")(server);
 //   console.log("started server");
 // });
 
-var thisRoundJustFinished = false;
 var rooms = {};
 var socketIdMapUser = {};
 var waitTimeBetweenTricks = 3000;
 var waitTimeBetweenRounds = 3000;
 
 const suits = ["C", "D", "H", "S"];
-const ranks = [
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "10",
-  "J",
-  "Q",
-  "K",
-  "A",
-];
+const ranks = "2,3,4,5,6,7,8,9,10,J,Q,K,A".split(",");
 const deck = ranks.flatMap((rank) => suits.map((suit) => rank + suit));
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -205,6 +190,7 @@ const initRoom = (room) => {
   rooms[room].currentRoundNumberTricksPlayed = 0;
   rooms[room].currentRoundTrumpSuit = "";
   rooms[room].currentRoundTrumpCard = "";
+  rooms[room].currentRoundJustFinished = false;
   // Information for the current trick
   rooms[room].currentPlayerIndex = -1;
   rooms[room].currentTrickNumberCardsPlayed = 0;
@@ -376,11 +362,14 @@ io.on("connection", (socket) => {
     if (socket.id in socketIdMapUser) {
       var username = socketIdMapUser[socket.id].username;
       var room = socketIdMapUser[socket.id].room;
+      delete socketIdMapUser[socket.id];
       rooms[room][username].connected = false;
       console.log(`player ${username} disconnected from room ${room}`);
-      rooms[room].players = rooms[room].players.filter(
-        (player) => player !== username
-      );
+      if (!rooms[room].gameStarted) {
+        rooms[room].players = rooms[room].players.filter(
+          (player) => player !== username
+        );
+      }
       broadcastPlayers(room);
     }
   });
@@ -578,8 +567,8 @@ io.on("connection", (socket) => {
         rooms[data.room].currentRoundNumberTricksPlayed ===
         rooms[data.room].currentRoundNumTricks
       ) {
-        // set `thisRoundJustFinished` so that we do not collect card
-        thisRoundJustFinished = true;
+        // set `currentRoundJustFinished` so that we do not collect card
+        rooms[data.room].currentRoundJustFinished = true;
 
         // update room information for next round
         rooms[data.room].currentRoundFirstPlayerIndex =
@@ -636,14 +625,14 @@ io.on("connection", (socket) => {
     }
 
     // collect the card to be played by the next player
-    if (!thisRoundJustFinished) {
+    if (!rooms[data.room].currentRoundJustFinished) {
       // only for special round
       if (rooms[data.room].currentRoundNumTricks == 1) {
         await delay(waitTimeBetweenTricks / rooms[data.room].numPlayers);
       }
       collectOnePlayedCard(data.room);
     } else {
-      thisRoundJustFinished = false;
+      rooms[data.room].currentRoundJustFinished = false;
     }
   });
 });
