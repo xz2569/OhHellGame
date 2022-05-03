@@ -10,9 +10,9 @@ import WaitRoom from "./component/WaitRoom";
 // 1. local wifi network
 // const socket = io.connect("http://192.168.1.73:3001");
 // 2. local browser on personal laptop
-const socket = io.connect("http://localhost:3001");
+// const socket = io.connect("http://localhost:3001");
 // 3. deployment
-// const socket = io();
+const socket = io();
 
 function App() {
   const [username, setUsername] = useState("");

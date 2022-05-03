@@ -36,10 +36,11 @@ const JoinForm = ({
             onChange={passCodeOnChange}
           />
         </Form.Group>
-
-        <Button variant="primary" type="submit" onClick={joinRoom}>
-          Join Room
-        </Button>
+        <div className="d-grid gap-2">
+          <Button variant="primary" type="submit" onClick={joinRoom}>
+            Join Room
+          </Button>
+        </div>
       </Form>
     </div>
   );

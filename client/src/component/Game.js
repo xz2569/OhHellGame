@@ -7,7 +7,7 @@ import ScoreTable from "./ScoreTable";
 import TrumpCard from "./TrumpCard";
 import DetailedScoreBoard from "./DetailedScoreBoard";
 import SubmitGuess from "./SubmitGuess";
-import { Container, Row, Col } from "react-bootstrap";
+import { Container, Row, Col, Button } from "react-bootstrap";
 import { FaCheck, FaQuestion, FaTimes, FaBan } from "react-icons/fa";
 
 const Game = ({ socket, username, room }) => {
@@ -28,10 +28,13 @@ const Game = ({ socket, username, room }) => {
   const [numTricksThisRound, setNumTricksThisRound] = useState(0);
   const [gameEnded, setGameEnded] = useState(false);
   const [showGuessInfo, setShowGuessInfo] = useState(true);
+  const [lowLeftInHand, setLowLeftInHand] = useState(true);
 
   const suits = ["C", "D", "S", "H"];
   const ranks = "2,3,4,5,6,7,8,9,10,J,Q,K,A".split(",");
+  const ranksRev = "A,K,Q,J,10,9,8,7,6,5,4,3,2".split(",");
   const deck = suits.flatMap((suit) => ranks.map((rank) => rank + suit));
+  const deckRev = suits.flatMap((suit) => ranksRev.map((rank) => rank + suit));
 
   const onClick = (e) => {
     e.preventDefault();
@@ -65,11 +68,27 @@ const Game = ({ socket, username, room }) => {
     }
   };
 
-  const showDetail = () => {
+  const reverseCardOrder = () => {
+    if (lowLeftInHand) {
+      myCards.sort((card1, card2) => {
+        return deckRev.indexOf(card1) - deckRev.indexOf(card2);
+      });
+      setMyCards(myCards);
+      setLowLeftInHand(false);
+    } else {
+      myCards.sort((card1, card2) => {
+        return deck.indexOf(card1) - deck.indexOf(card2);
+      });
+      setMyCards(myCards);
+      setLowLeftInHand(true);
+    }
+  };
+
+  const showScoreDetail = () => {
     setModalShow(true);
   };
 
-  const hideDetail = () => {
+  const hideScoreDetail = () => {
     setModalShow(false);
   };
 
@@ -121,7 +140,7 @@ const Game = ({ socket, username, room }) => {
         return deck.indexOf(card1) - deck.indexOf(card2);
       });
       setMyCards(dataSorted);
-      setNumTricksThisRound(dataSorted.length);
+      setNumTricksThisRound(data.length);
     });
 
     socket.off("trump_card").on("trump_card", (data) => {
@@ -245,6 +264,17 @@ const Game = ({ socket, username, room }) => {
               trumpSuit={trumpCard[trumpCard.length - 1]}
             />
           </Row>
+          <Row>
+            <Button
+              style={{ height: "50px" }}
+              variant="link"
+              onClick={reverseCardOrder}
+            >
+              {lowLeftInHand
+                ? "change to high card on the left"
+                : "change to low card on the left"}
+            </Button>
+          </Row>
         </Col>
 
         {/* Information Column */}
@@ -256,13 +286,16 @@ const Game = ({ socket, username, room }) => {
           </Row>
           <Row style={{ height: "20px" }}></Row>
           <Row>
-            <ScoreTable playersInfo={playersInfo} showDetail={showDetail} />
+            <ScoreTable
+              playersInfo={playersInfo}
+              showDetail={showScoreDetail}
+            />
           </Row>
           <Row style={{ height: "100px" }}></Row>
           <Row
             style={{
               position: "absolute",
-              bottom: "5px",
+              bottom: "50px",
               left: "50%",
               transform: "translate(-50%,0)",
               margin: "0px",
@@ -274,7 +307,7 @@ const Game = ({ socket, username, room }) => {
       </Row>
       <DetailedScoreBoard
         show={modalShow}
-        hideDetail={hideDetail}
+        hideDetail={hideScoreDetail}
         playersInfo={playersInfo}
         currentRound={gameEnded ? currentRound - 1 : currentRound}
         getGuessAndMade={getGuessAndMade}

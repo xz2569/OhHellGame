@@ -175,12 +175,12 @@ const broadcastPlayersInfo = (room, specialRound) => {
 };
 
 /* initialize information in the room (e.g., game status) */
-const initRoom = (room) => {
+const initRoom = (room, initNumTricks) => {
   rooms[room].gameStarted = true;
   rooms[room].lastMessage = "";
   rooms[room].numPlayers = rooms[room].players.length;
   rooms[room].maxTrickPerRound = Math.min(
-    8,
+    initNumTricks,
     Math.floor(51 / rooms[room].numPlayers)
   );
   rooms[room].currentRound = 1;
@@ -374,10 +374,10 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("start_game", (room) => {
+  socket.on("start_game", ({ room, initNumTricks }) => {
     console.log("game starting...");
     io.sockets.to(room).emit("show_game");
-    initRoom(room);
+    initRoom(room, initNumTricks);
     broadcastPlayersInfo(room, false);
     dealCards(room);
   });
