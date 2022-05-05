@@ -71,7 +71,6 @@ const Game = ({ socket, username, room }) => {
   };
 
   const sortHand = (data) => {
-    console.log("lowLeftInHand", lowLeftInHandRef.current);
     if (lowLeftInHandRef.current) {
       return data.sort((card1, card2) => {
         return deck.indexOf(card1) - deck.indexOf(card2);
