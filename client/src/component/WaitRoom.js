@@ -35,7 +35,8 @@ const WaitRoom = ({ socket, username, room }) => {
       <Container className="d-grid gap-2">
         <div style={{ padding: "20px" }}></div>
         <h2 style={{ fontFamily: "Palette Mosaic, cursive" }}>Players</h2>
-        <div style={{ padding: "20px" }}></div>
+        <h5>Room: {room}</h5>
+        <div style={{ padding: "10px" }}></div>
         <Players
           players={players}
           avatarIds={[...Array(players.length).keys()].map((x) => x + 1)}
