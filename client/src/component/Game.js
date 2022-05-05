@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import PlayZone from "./PlayZone";
 import Hand from "./Hand";
 import GuessInfo from "./GuessInfo";
@@ -29,6 +29,8 @@ const Game = ({ socket, username, room }) => {
   const [gameEnded, setGameEnded] = useState(false);
   const [showGuessInfo, setShowGuessInfo] = useState(true);
   const [lowLeftInHand, setLowLeftInHand] = useState(true);
+  const lowLeftInHandRef = useRef();
+  lowLeftInHandRef.current = lowLeftInHand;
 
   const suits = ["C", "D", "S", "H"];
   const ranks = "2,3,4,5,6,7,8,9,10,J,Q,K,A".split(",");
@@ -69,7 +71,8 @@ const Game = ({ socket, username, room }) => {
   };
 
   const sortHand = (data) => {
-    if (lowLeftInHand) {
+    console.log("lowLeftInHand", lowLeftInHandRef.current);
+    if (lowLeftInHandRef.current) {
       return data.sort((card1, card2) => {
         return deck.indexOf(card1) - deck.indexOf(card2);
       });
@@ -142,8 +145,7 @@ const Game = ({ socket, username, room }) => {
 
     socket.off("deal_card").on("deal_card", (data) => {
       console.log("card received: ", data);
-      const dataSorted = sortHand(data);
-      setMyCards(dataSorted);
+      setMyCards(sortHand(data.slice()));
       setNumTricksThisRound(data.length);
     });
 
