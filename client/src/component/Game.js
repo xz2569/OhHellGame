@@ -68,21 +68,27 @@ const Game = ({ socket, username, room }) => {
     }
   };
 
-  const reverseCardOrder = () => {
+  const sortHand = (data) => {
     if (lowLeftInHand) {
-      myCards.sort((card1, card2) => {
-        return deckRev.indexOf(card1) - deckRev.indexOf(card2);
-      });
-      setMyCards(myCards);
-      setLowLeftInHand(false);
-    } else {
-      myCards.sort((card1, card2) => {
+      return data.sort((card1, card2) => {
         return deck.indexOf(card1) - deck.indexOf(card2);
       });
-      setMyCards(myCards);
-      setLowLeftInHand(true);
+    } else {
+      return data.sort((card1, card2) => {
+        return deckRev.indexOf(card1) - deckRev.indexOf(card2);
+      });
     }
   };
+
+  const reverseCardOrder = () => {
+    setLowLeftInHand(!lowLeftInHand);
+  };
+
+  useEffect(() => {
+    // use .slice() to pass by value instead of reference
+    // otherwise, re-rendering will not be triggered
+    setMyCards(sortHand(myCards.slice()));
+  }, [lowLeftInHand]);
 
   const showScoreDetail = () => {
     setModalShow(true);
@@ -136,9 +142,7 @@ const Game = ({ socket, username, room }) => {
 
     socket.off("deal_card").on("deal_card", (data) => {
       console.log("card received: ", data);
-      const dataSorted = data.sort((card1, card2) => {
-        return deck.indexOf(card1) - deck.indexOf(card2);
-      });
+      const dataSorted = sortHand(data);
       setMyCards(dataSorted);
       setNumTricksThisRound(data.length);
     });
