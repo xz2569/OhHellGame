@@ -26,7 +26,7 @@ const Game = ({ socket, username, room }) => {
   const [leadingPlayer, setLeadingPlayer] = useState("");
   const [modalShow, setModalShow] = useState(false);
   const [numTricksThisRound, setNumTricksThisRound] = useState(0);
-  const [gameEnded, setGameEnded] = useState(false);
+  const [roundEnded, setRoundEnded] = useState(false);
   const [showGuessInfo, setShowGuessInfo] = useState(true);
   const [lowLeftInHand, setLowLeftInHand] = useState(true);
   const lowLeftInHandRef = useRef();
@@ -139,7 +139,7 @@ const Game = ({ socket, username, room }) => {
       .on("update_playersInfo", ({ playersInfo, round }) => {
         setPlayersInfo(playersInfo);
         setCurrentRound(round);
-        console.log(playersInfo, round);
+        // console.log(playersInfo, round);
       });
 
     socket.off("deal_card").on("deal_card", (data) => {
@@ -158,11 +158,6 @@ const Game = ({ socket, username, room }) => {
       setGuess(-1);
       setMyGuessTurn(true);
       setGuessForbidden(data);
-    });
-
-    socket.off("your_guess_received").on("your_guess_received", () => {
-      console.log("your guess is received");
-      setMyGuessTurn(false);
     });
 
     socket.off("your_turn_to_play").on("your_turn_to_play", (suit) => {
@@ -184,14 +179,17 @@ const Game = ({ socket, username, room }) => {
       });
 
     socket.off("playing_player").on("playing_player", (data) => {
+      console.log(`playing player is ${data}`);
       setPlayingPlayer(data);
     });
 
     socket.off("winning_player").on("winning_player", (data) => {
+      console.log(`winning player is ${data}`);
       setWinningPlayer(data);
     });
 
     socket.off("leading_player").on("leading_player", (data) => {
+      console.log(`leading player is ${data}`);
       setLeadingPlayer(data);
     });
 
@@ -200,19 +198,21 @@ const Game = ({ socket, username, room }) => {
     });
 
     socket.off("end_of_round").on("end_of_round", () => {
+      console.log("end_of_round signal received");
+      setRoundEnded(true);
       setModalShow(true);
       setShowGuessInfo(false);
     });
 
     socket.off("staring_new_round").on("staring_new_round", () => {
+      console.log("starting_new_round signal received");
+      setRoundEnded(false);
       setModalShow(false);
       setShowGuessInfo(true);
     });
 
     socket.off("end_of_game").on("end_of_game", () => {
-      setModalShow(true);
-      setGameEnded(true);
-      setShowGuessInfo(false);
+      console.log("end_of_game signal received");
     });
   }, [socket]);
 
@@ -314,7 +314,7 @@ const Game = ({ socket, username, room }) => {
         show={modalShow}
         hideDetail={hideScoreDetail}
         playersInfo={playersInfo}
-        currentRound={gameEnded ? currentRound - 1 : currentRound}
+        currentRound={roundEnded ? currentRound - 1 : currentRound}
         getGuessAndMade={getGuessAndMade}
       />
     </Container>
