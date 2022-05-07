@@ -2,7 +2,7 @@ const express = require("express");
 const app = express();
 
 /* the following server code is for DEPLOYMENT */
-// in client folder, run `npm run build`
+/* in client folder, run `npm run build` */
 app.use(express.static("client/build"));
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT);
@@ -20,7 +20,7 @@ const io = require("socket.io")(server);
 //     origin: "http://localhost:3000",
 //     method: ["GET", "POST"],
 //   },
-// });s
+// });
 // server.listen(3001, () => {
 //   console.log("started server");
 // });
@@ -31,6 +31,7 @@ const waitTimeBetweenTricksWinnerDisplay = 2000;
 const waitTimeBetweenRoundsScoreDisplay = 3000;
 const waitTimeBetweenGuesses = 500;
 const waitTimeBetweenCardPlays = 500;
+const waitTimeBeforeAutoCardPlays = 1000;
 const waitTimeBeforeGameStart = 100;
 
 const suits = ["C", "D", "H", "S"];
@@ -365,21 +366,26 @@ const startTrick = (room) => {
   collectOnePlayedCard(room);
 };
 
-const collectOnePlayedCard = (room) => {
+const collectOnePlayedCard = async (room) => {
   // gather username of the next player
   var username = rooms[room].players[rooms[room].currentTrickPlayerIndex];
   console.log(`[ROOM ${room}] ask player ${username} to play a card`);
 
   // ask the player to play (manually or automatically)
-  if (rooms[room].currentRoundNumTricks !== 1) {
-    rooms[room][username].socket.emit(
-      "your_turn_to_play",
-      rooms[room].currentTrickSuit
-    );
-  } else {
+  if (
+    rooms[room].currentRoundNumTricks === 1 ||
+    rooms[room].currentRoundNumberTricksPlayed ===
+      rooms[room].currentRoundNumTricks - 1
+  ) {
+    await delay(waitTimeBeforeAutoCardPlays);
     rooms[room][username].socket.emit(
       "your_turn_to_play_auto",
       rooms[room][username].cardsInHand[0]
+    );
+  } else {
+    rooms[room][username].socket.emit(
+      "your_turn_to_play",
+      rooms[room].currentTrickSuit
     );
   }
 
