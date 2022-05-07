@@ -20,15 +20,18 @@ const io = require("socket.io")(server);
 //     origin: "http://localhost:3000",
 //     method: ["GET", "POST"],
 //   },
-// });
+// });s
 // server.listen(3001, () => {
 //   console.log("started server");
 // });
 
 var rooms = {};
 var socketIdMapUser = {};
-var waitTimeBetweenTricks = 3000;
-var waitTimeBetweenRounds = 3000;
+const waitTimeBetweenTricksWinnerDisplay = 2000;
+const waitTimeBetweenRoundsScoreDisplay = 3000;
+const waitTimeBetweenGuesses = 500;
+const waitTimeBetweenCardPlays = 500;
+const waitTimeBeforeGameStart = 100;
 
 const suits = ["C", "D", "H", "S"];
 const ranks = "2,3,4,5,6,7,8,9,10,J,Q,K,A".split(",");
@@ -46,17 +49,14 @@ const shuffleArray = (array) => {
 };
 
 const addPlayerToRoom = (data, socket) => {
-  console.log(`user with username=${data.username} joined room ${data.room}`);
-
   // set up the room if this is the first person to the room
   if (!(data.room in rooms)) {
-    console.log("set up a new room to put players in");
+    console.log(`[ROOM ${data.room}] >>> set up a new room to put players in`);
     rooms[data.room] = { players: [], gameStarted: false };
   }
 
   // add player to room if game has not started yet
   if (!rooms[data.room].gameStarted) {
-    console.log("game not started yet, put in socket information");
     rooms[data.room].players.push(data.username);
     rooms[data.room][data.username] = {
       socket: socket,
@@ -65,9 +65,11 @@ const addPlayerToRoom = (data, socket) => {
       connected: true,
     };
     socket.emit("room_joined", data.username);
-  } else {
+  }
+  // otherwise, reconnect player to the room if the player exists
+  else {
     if (rooms[data.room].players.indexOf(data.username) !== -1) {
-      console.log("reconnecting .....");
+      console.log(`[ROOM ${data.room}] >>> reconnecting .....`);
       if (
         rooms[data.room][data.username].connected === false &&
         rooms[data.room][data.username].passcode == data.passcode
@@ -75,10 +77,8 @@ const addPlayerToRoom = (data, socket) => {
         reconnectToGame(data, socket);
         socket.emit("room_joined", data.username);
       } else {
-        socket.emit(
-          "connection_error",
-          "ERROR: you are still connected or wrong passcode"
-        );
+        console.log(`[ROOM ${data.room}]     >>> Failed`);
+        socket.emit("connection_error", "ERROR: hmmmmm, imposter detected ");
       }
     }
   }
@@ -116,25 +116,22 @@ const reconnectToGame = (data, socket) => {
 
   // if currently Guessing
   if (
-    rooms[data.room].players.indexOf(data.username) ===
-      (rooms[data.room].currentRoundFirstPlayerIndex +
-        rooms[data.room].numGuessSubmitted) %
-        rooms[data.room].numPlayers &&
-    rooms[data.room].currentlyGuessing
+    rooms[data.room].players[rooms[data.room].currentGuessPlayerIndex] ===
+      data.username &&
+    rooms[data.room].currentGuessInProgress
   ) {
     collectOneGuess(data.room);
   }
 
   // if currently Playing
   if (
-    rooms[data.room].players[rooms[data.room].currentPlayerIndex] ===
+    rooms[data.room].players[rooms[data.room].currentTrickPlayerIndex] ===
     data.username
   ) {
     collectOnePlayedCard(data.room);
   }
 };
 
-/* broadcast players (names) during wait room phase */
 const broadcastPlayers = (room) => {
   if (!rooms[room].gameStarted) {
     io.sockets.to(room).emit("waiting_players", rooms[room].players);
@@ -143,7 +140,6 @@ const broadcastPlayers = (room) => {
   }
 };
 
-/* broadcast players (game status) during game phase */
 const broadcastPlayersInfo = (room, specialRound) => {
   if (!specialRound) {
     io.sockets.to(room).emit("update_playersInfo", {
@@ -166,7 +162,7 @@ const broadcastPlayersInfo = (room, specialRound) => {
         round: rooms[room].currentRound,
       });
     });
-    // at the end of guess round, all hands will be broadcasted
+    // preparation so that at the end of guesses, all hands will be broadcasted
     rooms[room].playersInfo.forEach((playerInfo) => {
       playerInfo[rooms[room].currentRound].cardPlayed =
         rooms[room][playerInfo.username].cardsInHand[0];
@@ -174,7 +170,6 @@ const broadcastPlayersInfo = (room, specialRound) => {
   }
 };
 
-/* initialize information in the room (e.g., game status) */
 const initRoom = (room, initNumTricks) => {
   rooms[room].gameStarted = true;
   rooms[room].lastMessage = "";
@@ -183,25 +178,27 @@ const initRoom = (room, initNumTricks) => {
     initNumTricks,
     Math.floor(51 / rooms[room].numPlayers)
   );
+  // Information for the current Round
   rooms[room].currentRound = 1;
   rooms[room].currentRoundNumTricks = rooms[room].maxTrickPerRound;
-  // Information for the current Round
   rooms[room].currentRoundFirstPlayerIndex = 0;
   rooms[room].currentRoundNumberTricksPlayed = 0;
   rooms[room].currentRoundTrumpSuit = "";
   rooms[room].currentRoundTrumpCard = "";
-  rooms[room].currentRoundJustFinished = false;
   // Information for the current trick
-  rooms[room].currentPlayerIndex = -1;
+  rooms[room].currentTrickPlayerIndex = -1;
   rooms[room].currentTrickNumberCardsPlayed = 0;
+  rooms[room].currentTrickSuit = "";
   rooms[room].currentTrickWinner = "";
   rooms[room].currentTrickWinningCard = "";
-  rooms[room].currentTrickSuit = "";
+  rooms[room].currentTrickWinningSuit = "";
+  rooms[room].currentTrickWinningRank = -1;
   // to ensure current guess is submitted
-  rooms[room].currentlyGuessing = false;
-  rooms[room].numGuessSubmitted = 0;
-  rooms[room].totalGuess = 0;
-  rooms[room].guessForbidden = -1;
+  rooms[room].currentGuessInProgress = false;
+  rooms[room].currentGuessPlayerIndex = 0;
+  rooms[room].currentGuessNumberSubmitted = 0;
+  rooms[room].currentGuessTotal = 0;
+  rooms[room].currentGuessForbidden = -1;
   // player Info that is public for everyone
   rooms[room].playersInfo = [];
   rooms[room].players.forEach((player, index) =>
@@ -220,7 +217,34 @@ const initRoom = (room, initNumTricks) => {
   );
 };
 
-/* deal cards & send trump card to players */
+const startRound = async (room) => {
+  // braodcast games status (hide score board & show guess info)
+  io.sockets.to(room).emit("staring_new_round");
+
+  // deal card
+  var numberCardsDealed = dealCards(room);
+
+  // broadcast other players information if at special rounds
+  if (rooms[room].currentRoundNumTricks === 1) {
+    broadcastPlayersInfo(room, true);
+  }
+
+  // reveal trump card
+  revealTrumpCard(room, numberCardsDealed);
+
+  // broadcast the leading player (crown sign)
+  io.sockets
+    .to(room)
+    .emit(
+      "leading_player",
+      rooms[room].players[rooms[room].currentRoundFirstPlayerIndex]
+    );
+
+  // start collecting guesses
+  await delay(waitTimeBetweenGuesses);
+  collectOneGuess(room);
+};
+
 const dealCards = (room) => {
   var start_from = 0;
   var num_cards = rooms[room].currentRoundNumTricks;
@@ -232,7 +256,9 @@ const dealCards = (room) => {
   // deal cards to players
   rooms[room].players.forEach((username) => {
     cardsInHand = deck.slice(start_from, start_from + num_cards);
-    console.log("dealing to player", username, cardsInHand);
+    console.log(
+      `[ROOM ${room}] dealing to player ${username} cards ${cardsInHand}`
+    );
     // special round or not
     if (rooms[room].currentRoundNumTricks !== 1) {
       rooms[room][username].socket.emit("deal_card", cardsInHand);
@@ -243,66 +269,108 @@ const dealCards = (room) => {
     rooms[room][username].cardsInHand = cardsInHand;
   });
 
-  // broadcast other players information at the special rounds
-  if (rooms[room].currentRoundNumTricks === 1) {
-    broadcastPlayersInfo(room, true);
-  }
+  // return number of cards dealed (for keeping track of the trump card)
+  return start_from;
+};
 
-  // send trump card information to players
+const revealTrumpCard = (room, numberCardsDealed) => {
   var trump_card;
+
+  // special round without trump card
   if (rooms[room].currentRound === rooms[room].maxTrickPerRound + 1) {
-    // special round without trump
     trump_card = "back";
   } else {
-    trump_card = deck.slice(start_from, start_from + 1)[0];
+    trump_card = deck.slice(numberCardsDealed, numberCardsDealed + 1)[0];
   }
+  console.log(`[ROOM ${room}] trump card is ${trump_card}`);
+
+  // update room information and send trump card to all players
   rooms[room].currentRoundTrumpCard = trump_card;
   rooms[room].currentRoundTrumpSuit = trump_card[trump_card.length - 1];
   io.sockets.to(room).emit("trump_card", trump_card);
-
-  // start collecting guesses
-  collectOneGuess(room);
 };
 
-/* ask the next player to submit their guess */
 const collectOneGuess = (room) => {
-  rooms[room].currentlyGuessing = true;
-  var username =
-    rooms[room].players[
-      (rooms[room].currentRoundFirstPlayerIndex +
-        rooms[room].numGuessSubmitted) %
-        rooms[room].numPlayers
-    ];
+  // set room status
+  rooms[room].currentGuessInProgress = true;
+
+  // ask the next player to submit a guess
+  var username = rooms[room].players[rooms[room].currentGuessPlayerIndex];
+  console.log(`[ROOM ${room}] asking player ${username} to submit a guess`);
   rooms[room][username].socket.emit(
     "your_turn_to_guess",
-    rooms[room].guessForbidden
+    rooms[room].currentGuessForbidden
   );
 
-  // broadcast current player to all players
-  if (rooms[room].numGuessSubmitted === 0) {
+  // broadcast "who is guessing" to all players (message & spotlight)
+  if (rooms[room].currentGuessNumberSubmitted === 0) {
     rooms[room].lastMessage =
       `Starting round ${rooms[room].currentRound}` +
       ` ... ` +
       `${username} is guessing`;
-    // leader of the trick
-    if (rooms[room].numGuessSubmitted === 0) {
-      io.sockets.to(room).emit("leading_player", username);
-    }
   } else {
     rooms[room].lastMessage = `${username} is guessing`;
   }
-
   io.sockets.to(room).emit("message", rooms[room].lastMessage);
   io.sockets.to(room).emit("playing_player", username);
-
-  // logging on the server side
-  console.log(`asking player ${username} to submit a guess`);
 };
 
-/* ask the next player to play a card */
+const updateRoomWithNewGuess = (data) => {
+  // keep track of guesses so far
+  rooms[data.room].currentGuessNumberSubmitted++;
+  rooms[data.room].currentGuessTotal += data.guess;
+  rooms[data.room].currentGuessPlayerIndex =
+    (rooms[data.room].currentGuessPlayerIndex + 1) %
+    rooms[data.room].numPlayers;
+
+  // if the next player to guess is the last player, set restriction
+  if (
+    rooms[data.room].currentGuessNumberSubmitted ===
+    rooms[data.room].numPlayers - 1
+  ) {
+    rooms[data.room].currentGuessForbidden =
+      rooms[data.room].currentRoundNumTricks -
+      rooms[data.room].currentGuessTotal;
+  }
+};
+
+const prepRoomAfterGuessComplete = (room) => {
+  // update room status
+  rooms[room].currentGuessInProgress = false;
+
+  // set the player index for upcoming trick
+  rooms[room].currentTrickPlayerIndex =
+    rooms[room].currentRoundFirstPlayerIndex;
+
+  // revael hand automatically if at special rounds
+  if (rooms[room].currentRoundNumTricks === 1) {
+    rooms[room].players.forEach((username) => {
+      rooms[room][username].socket.emit(
+        "deal_card",
+        rooms[room][username].cardsInHand
+      );
+    });
+  }
+};
+
+const startTrick = (room) => {
+  // broadcast leader of the trick
+  io.sockets
+    .to(room)
+    .emit(
+      "leading_player",
+      rooms[room].players[rooms[room].currentTrickPlayerIndex]
+    );
+  // ask the first player to play a card
+  collectOnePlayedCard(room);
+};
+
 const collectOnePlayedCard = (room) => {
-  var username = rooms[room].players[rooms[room].currentPlayerIndex];
-  // special one card round or not
+  // gather username of the next player
+  var username = rooms[room].players[rooms[room].currentTrickPlayerIndex];
+  console.log(`[ROOM ${room}] ask player ${username} to play a card`);
+
+  // ask the player to play (manually or automatically)
   if (rooms[room].currentRoundNumTricks !== 1) {
     rooms[room][username].socket.emit(
       "your_turn_to_play",
@@ -315,27 +383,223 @@ const collectOnePlayedCard = (room) => {
     );
   }
 
-  // leader of the trick
-  if (rooms[room].currentTrickNumberCardsPlayed === 0) {
-    io.sockets.to(room).emit("leading_player", username);
-  }
-
   // broadcast current player to all players
   rooms[room].lastMessage = `${username} is playing`;
   io.sockets.to(room).emit("message", rooms[room].lastMessage);
   io.sockets.to(room).emit("playing_player", username);
+};
 
-  // logging on the server side
-  console.log(`ask player ${username} to play a card`);
+const updateRoomWithNewCardPlayed = (data) => {
+  // update cardsInHand
+  rooms[data.room][data.username].cardsInHand = rooms[data.room][
+    data.username
+  ].cardsInHand.filter((card) => card !== data.cardPlayed);
+
+  // update information relating to the current trick
+  updateCurrentTrickInfo(data);
+
+  // update the winner of the current trick so far
+  updateCurrentTrickWinner(data);
+};
+
+const updateCurrentTrickInfo = (data) => {
+  rooms[data.room].currentTrickPlayerIndex =
+    (rooms[data.room].currentTrickPlayerIndex + 1) %
+    rooms[data.room].numPlayers;
+  rooms[data.room].currentTrickNumberCardsPlayed++;
+  if (rooms[data.room].currentTrickNumberCardsPlayed === 1) {
+    rooms[data.room].currentTrickSuit =
+      data.cardPlayed[data.cardPlayed.length - 1];
+  }
+};
+
+const updateCurrentTrickWinner = (data) => {
+  // if first card played, automatically the winner
+  if (rooms[data.room].currentTrickNumberCardsPlayed === 1) {
+    setNewWinner(data);
+  }
+  // otherwise, compare with previous winning card
+  else {
+    var played_suit = data.cardPlayed[data.cardPlayed.length - 1];
+    var played_rank = ranks.indexOf(
+      data.cardPlayed.slice(0, data.cardPlayed.length - 1)
+    );
+    if (played_suit === rooms[data.room].currentTrickWinningSuit) {
+      if (played_rank > rooms[data.room].currentTrickWinningRank) {
+        setNewWinner(data);
+      }
+    } else {
+      if (played_suit === rooms[data.room].currentRoundTrumpSuit) {
+        setNewWinner(data);
+      }
+    }
+  }
+
+  // log winner after new card played
+  console.log(
+    `[ROOM ${data.room}] winner so far is ${
+      rooms[data.room].currentTrickWinner
+    }`
+  );
+};
+
+const setNewWinner = (data) => {
+  rooms[data.room].currentTrickWinner = data.username;
+  rooms[data.room].currentTrickWinningCard = data.cardPlayed;
+  rooms[data.room].currentTrickWinningSuit =
+    rooms[data.room].currentTrickWinningCard[
+      rooms[data.room].currentTrickWinningCard.length - 1
+    ];
+  rooms[data.room].currentTrickWinningRank = ranks.indexOf(
+    rooms[data.room].currentTrickWinningCard.slice(
+      0,
+      rooms[data.room].currentTrickWinningCard.length - 1
+    )
+  );
+};
+
+const broadCastTrickWinner = (room) => {
+  rooms[room].lastMessage = `Winner is ${rooms[room].currentTrickWinner}`;
+  io.sockets.to(room).emit("message", rooms[room].lastMessage);
+  io.sockets.to(room).emit("winning_player", rooms[room].currentTrickWinner);
+  io.sockets.to(room).emit("playing_player", "");
+
+  // update playersInfo (made) and broadcast to all
+  rooms[room].playersInfo.forEach((playerInfo) => {
+    if (playerInfo.username === rooms[room].currentTrickWinner) {
+      playerInfo[rooms[room].currentRound].made++;
+    }
+  });
+  broadcastPlayersInfo(room, false);
+};
+
+const finishTrick = (room) => {
+  // update round information
+  rooms[room].currentRoundNumberTricksPlayed++;
+
+  // prepare current trick information for the next trick
+  prepCurrentTrickInfoForNextTrick(room);
+
+  // update playersInfo (cardPlayed and prevCardPlayed) and broadcast
+  rooms[room].playersInfo.forEach((playerInfo) => {
+    playerInfo[rooms[room].currentRound].prevCardPlayed =
+      playerInfo[rooms[room].currentRound].cardPlayed;
+    playerInfo[rooms[room].currentRound].cardPlayed = "";
+  });
+  broadcastPlayersInfo(room, false);
+
+  // reset winning player and broadcast
+  io.sockets.to(room).emit("winning_player", "");
+};
+
+const prepCurrentTrickInfoForNextTrick = (room) => {
+  rooms[room].currentTrickPlayerIndex = rooms[room].players.indexOf(
+    rooms[room].currentTrickWinner
+  );
+  rooms[room].currentTrickNumberCardsPlayed = 0;
+  rooms[room].currentTrickSuit = "";
+};
+
+const finishRound = (room) => {
+  // update score of players
+  updatePlayerScore(room);
+
+  // update room information for next round
+  prepCurrentRoundInfoForNextRound(room);
+
+  // update playersInfo for next round and broadcast to all
+  rooms[room].playersInfo.forEach((playerInfo) => {
+    playerInfo[rooms[room].currentRound] = {
+      prevCardPlayed: "",
+      cardPlayed: "",
+      guess: -1,
+      made: 0,
+      score: 0,
+    };
+  });
+  broadcastPlayersInfo(room, false);
+
+  // broadcast to players game status (show score board)
+  io.sockets.to(room).emit("end_of_round");
+};
+
+const updatePlayerScore = (room) => {
+  rooms[room].playersInfo.forEach((playerInfo) => {
+    var guess = playerInfo[rooms[room].currentRound].guess;
+    var made = playerInfo[rooms[room].currentRound].made;
+    var score_this_round;
+    if (guess === made) {
+      score_this_round = 10 + 10 * made;
+    } else {
+      score_this_round = -10 * Math.abs(guess - made);
+    }
+    playerInfo[rooms[room].currentRound].score = score_this_round;
+    playerInfo.score += score_this_round;
+  });
+};
+
+const prepCurrentRoundInfoForNextRound = (room) => {
+  rooms[room].currentRoundFirstPlayerIndex =
+    (rooms[room].currentRoundFirstPlayerIndex + 1) % rooms[room].numPlayers;
+  rooms[room].currentRoundNumberTricksPlayed = 0;
+  rooms[room].currentRoundTrumpSuit = "";
+  rooms[room].currentRound++;
+  if (rooms[room].currentRound <= rooms[room].maxTrickPerRound) {
+    rooms[room].currentRoundNumTricks =
+      rooms[room].maxTrickPerRound + 1 - rooms[room].currentRound;
+  } else {
+    rooms[room].currentRoundNumTricks =
+      rooms[room].currentRound - rooms[room].maxTrickPerRound;
+  }
+  rooms[room].currentGuessTotal = 0;
+  rooms[room].currentGuessNumberSubmitted = 0;
+  rooms[room].currentGuessPlayerIndex =
+    rooms[room].currentRoundFirstPlayerIndex;
+  rooms[room].currentGuessForbidden = -1;
+};
+
+const finishGame = (room) => {
+  console.log(`[ROOM ${room}] game finished!`);
+  rooms[room].lastMessage = "Game complete!";
+  io.sockets.to(room).emit("message", rooms[room].lastMessage);
+  io.sockets.to(room).emit("end_of_game");
 };
 
 /* collection of socket.on(...) functions */
 io.on("connection", (socket) => {
   console.log("New connection", socket.id);
 
+  socket.on("disconnect", () => {
+    console.log(socket.id, "disconnected");
+    if (socket.id in socketIdMapUser) {
+      // gather username and room information correponding to the socket
+      var username = socketIdMapUser[socket.id].username;
+      var room = socketIdMapUser[socket.id].room;
+      console.log(
+        `[ROOM ${room}] player ${username} disconnected from room ${room}`
+      );
+
+      // remove socket from socketIdMapUser
+      delete socketIdMapUser[socket.id];
+
+      // update player information and broadcast if in waiting room
+      if (room in rooms) {
+        rooms[room][username].connected = false;
+        if (!rooms[room].gameStarted) {
+          rooms[room].players = rooms[room].players.filter(
+            (player) => player !== username
+          );
+          broadcastPlayers(room);
+        }
+      }
+    }
+  });
+
   socket.on("join_room", (data) => {
+    // add socket to room
     socket.join(data.room);
-    // if username exists
+
+    // if username exists, add '_' to name
     try {
       while (rooms[data.room].players.indexOf(data.username) !== -1) {
         if (!rooms[data.room].gameStarted) {
@@ -345,46 +609,43 @@ io.on("connection", (socket) => {
         }
       }
     } catch (e) {}
-    // store which user and room this socket is for
-    socketIdMapUser[socket.id] = {
-      username: data.username,
-      room: data.room,
-    };
+
     // add player to room
+    console.log(
+      `[ROOM ${data.room}] player ${data.username} joined room ${data.room}`
+    );
     addPlayerToRoom(data, socket);
+
+    // broadcast the new player
     if (!rooms[data.room].gameStarted) {
       broadcastPlayers(data.room);
     }
-  });
 
-  socket.on("disconnect", () => {
-    console.log(socket.id, "disconnected");
-    if (socket.id in socketIdMapUser) {
-      var username = socketIdMapUser[socket.id].username;
-      var room = socketIdMapUser[socket.id].room;
-      delete socketIdMapUser[socket.id];
-      rooms[room][username].connected = false;
-      console.log(`player ${username} disconnected from room ${room}`);
-      if (!rooms[room].gameStarted) {
-        rooms[room].players = rooms[room].players.filter(
-          (player) => player !== username
-        );
-      }
-      broadcastPlayers(room);
+    // store which user and room this socket is for
+    if (!rooms[data.room].gameStarted) {
+      socketIdMapUser[socket.id] = {
+        username: data.username,
+        room: data.room,
+      };
     }
   });
 
-  socket.on("start_game", ({ room, initNumTricks }) => {
-    console.log("game starting...");
+  socket.on("start_game", async ({ room, initNumTricks }) => {
+    console.log(`[ROOM ${room}] game starting...`);
+
+    // set up the game room and front-end Playzone
     io.sockets.to(room).emit("show_game");
     initRoom(room, initNumTricks);
     broadcastPlayersInfo(room, false);
-    dealCards(room);
+
+    // start the first round
+    await delay(waitTimeBeforeGameStart);
+    startRound(room);
   });
 
-  socket.on("submit_guess", (data) => {
+  socket.on("submit_guess", async (data) => {
     console.log(
-      `user with username=${data.username} guessed ${data.guess} hands`
+      `[ROOM ${data.room}] player ${data.username} guessed ${data.guess} hands`
     );
 
     // update playersInfo
@@ -394,21 +655,8 @@ io.on("connection", (socket) => {
       }
     });
 
-    // keep track of guesses so far
-    rooms[data.room].numGuessSubmitted++;
-    rooms[data.room].totalGuess += data.guess;
-
-    // if the next player to guess is the last player, set restriction
-    if (
-      rooms[data.room].numGuessSubmitted ===
-      rooms[data.room].numPlayers - 1
-    ) {
-      rooms[data.room].guessForbidden =
-        rooms[data.room].currentRoundNumTricks - rooms[data.room].totalGuess;
-    }
-
-    // confirmation so that guess form will be hidden
-    socket.emit("your_guess_received");
+    // update room information based on new guess
+    updateRoomWithNewGuess(data);
 
     // broadcast playersInfo to all players
     broadcastPlayersInfo(
@@ -416,223 +664,89 @@ io.on("connection", (socket) => {
       rooms[data.room].currentRoundNumTricks === 1
     );
 
+    // delay before asking the next player for guesses
+    await delay(waitTimeBetweenGuesses);
+
     // collect guess from the next player or start playing
-    if (rooms[data.room].numGuessSubmitted !== rooms[data.room].numPlayers) {
+    if (
+      rooms[data.room].currentGuessNumberSubmitted !==
+      rooms[data.room].numPlayers
+    ) {
       collectOneGuess(data.room);
     } else {
-      rooms[data.room].currentPlayerIndex =
-        rooms[data.room].currentRoundFirstPlayerIndex;
-      // special round (reveal hand)
-      if (rooms[data.room].currentRoundNumTricks === 1) {
-        rooms[data.room].players.forEach((username) => {
-          rooms[data.room][username].socket.emit(
-            "deal_card",
-            rooms[data.room][username].cardsInHand
-          );
-        });
-      }
-      rooms[data.room].currentlyGuessing = false;
-      collectOnePlayedCard(data.room);
+      prepRoomAfterGuessComplete(data.room);
+      startTrick(data.room);
     }
   });
 
   socket.on("card_played", async (data) => {
-    console.log(`player ${data.username} played card ${data.cardPlayed}`);
+    console.log(
+      `[ROOM ${data.room}] player ${data.username} played card ${data.cardPlayed}`
+    );
 
-    // update playersInfo
+    // update playersInfo and broadcast playersInfo to all players
     rooms[data.room].playersInfo.forEach((playerInfo) => {
       if (playerInfo.username === data.username) {
         playerInfo[rooms[data.room].currentRound].cardPlayed = data.cardPlayed;
       }
     });
-
-    // broadcast playersInfo to all players
     broadcastPlayersInfo(data.room, false);
 
-    // update cardsInHand
-    rooms[data.room][data.username].cardsInHand = rooms[data.room][
-      data.username
-    ].cardsInHand.filter((card) => card !== data.cardPlayed);
-
-    // update information relating to the current trick
-    rooms[data.room].currentPlayerIndex =
-      (rooms[data.room].currentPlayerIndex + 1) % rooms[data.room].numPlayers;
-    rooms[data.room].currentTrickNumberCardsPlayed++;
-
-    // update the winner of the current trick so far
-    if (rooms[data.room].currentTrickSuit === "") {
-      rooms[data.room].currentTrickWinner = data.username;
-      rooms[data.room].currentTrickWinningCard = data.cardPlayed;
-      rooms[data.room].currentTrickSuit =
-        data.cardPlayed[data.cardPlayed.length - 1];
-    } else {
-      var curr_winning_suit =
-        rooms[data.room].currentTrickWinningCard[
-          rooms[data.room].currentTrickWinningCard.length - 1
-        ];
-      var curr_winning_rank = ranks.indexOf(
-        rooms[data.room].currentTrickWinningCard.slice(
-          0,
-          rooms[data.room].currentTrickWinningCard.length - 1
-        )
-      );
-      var played_suit = data.cardPlayed[data.cardPlayed.length - 1];
-      var played_rank = ranks.indexOf(
-        data.cardPlayed.slice(0, data.cardPlayed.length - 1)
-      );
-
-      if (played_suit === curr_winning_suit) {
-        if (played_rank > curr_winning_rank) {
-          rooms[data.room].currentTrickWinner = data.username;
-          rooms[data.room].currentTrickWinningCard = data.cardPlayed;
-        }
-      } else {
-        if (played_suit === rooms[data.room].currentRoundTrumpSuit) {
-          rooms[data.room].currentTrickWinner = data.username;
-          rooms[data.room].currentTrickWinningCard = data.cardPlayed;
-        }
-      }
-      console.log(`winner is ${rooms[data.room].currentTrickWinner}`);
-    }
+    // update room information based on new card played
+    updateRoomWithNewCardPlayed(data);
 
     // if this is the last card for the current trick
-    if (
-      rooms[data.room].currentTrickNumberCardsPlayed ===
-      rooms[data.room].numPlayers
-    ) {
-      // update round information
-      rooms[data.room].currentRoundNumberTricksPlayed++;
-
-      // reset current trick information to be ready for the next trick
-      rooms[data.room].currentPlayerIndex = rooms[data.room].players.indexOf(
-        rooms[data.room].currentTrickWinner
-      );
-      rooms[data.room].currentTrickNumberCardsPlayed = 0;
-      rooms[data.room].currentTrickSuit = "";
+    var trickInProgress =
+      rooms[data.room].currentTrickNumberCardsPlayed <
+      rooms[data.room].numPlayers;
+    if (!trickInProgress) {
+      console.log(`[ROOM ${data.room}] current trick finished`);
+      await delay(waitTimeBetweenCardPlays);
 
       // broadcast winner to all players
-      await delay(500);
-      rooms[data.room].lastMessage = `Winner is ${
-        rooms[data.room].currentTrickWinner
-      }`;
-      io.sockets.to(data.room).emit("message", rooms[data.room].lastMessage);
+      broadCastTrickWinner(data.room);
 
-      io.sockets
-        .to(data.room)
-        .emit("winning_player", rooms[data.room].currentTrickWinner);
+      // wait and display winner and played cards
+      await delay(waitTimeBetweenTricksWinnerDisplay);
 
-      io.sockets.to(data.room).emit("playing_player", "");
-
-      // update playersInfo and broadcast to all
-      // (1). update all except for playedCard, and broadcast
-      rooms[data.room].playersInfo.forEach((playerInfo) => {
-        if (playerInfo.username === rooms[data.room].currentTrickWinner) {
-          playerInfo[rooms[data.room].currentRound].made++;
-        }
-        // if this is the last trick of the current round
-        if (
-          rooms[data.room].currentRoundNumberTricksPlayed ===
-          rooms[data.room].currentRoundNumTricks
-        ) {
-          var guess = playerInfo[rooms[data.room].currentRound].guess;
-          var made = playerInfo[rooms[data.room].currentRound].made;
-          var score_this_round;
-          if (guess === made) {
-            score_this_round = 10 + 10 * made;
-          } else {
-            score_this_round = -10 * Math.abs(guess - made);
-          }
-          playerInfo[rooms[data.room].currentRound].score = score_this_round;
-          playerInfo.score += score_this_round;
-        }
-      });
-      broadcastPlayersInfo(data.room, false);
-
-      // (2) wait (playedCard remain in display)
-      await delay(waitTimeBetweenTricks);
-
-      // (3) reset players' played card and broadcast
-      rooms[data.room].playersInfo.forEach((playerInfo) => {
-        playerInfo[rooms[data.room].currentRound].prevCardPlayed =
-          playerInfo[rooms[data.room].currentRound].cardPlayed;
-        playerInfo[rooms[data.room].currentRound].cardPlayed = "";
-      });
-      broadcastPlayersInfo(data.room, false);
-
-      // (4) reset winning player and broadcast
-      io.sockets.to(data.room).emit("winning_player", "");
-
-      // if this is also the last trick of the current round
-      if (
-        rooms[data.room].currentRoundNumberTricksPlayed ===
-        rooms[data.room].currentRoundNumTricks
-      ) {
-        // set `currentRoundJustFinished` so that we do not collect card
-        rooms[data.room].currentRoundJustFinished = true;
-
-        // update room information for next round
-        rooms[data.room].currentRoundFirstPlayerIndex =
-          (rooms[data.room].currentRoundFirstPlayerIndex + 1) %
-          rooms[data.room].numPlayers;
-        rooms[data.room].currentRoundNumberTricksPlayed = 0;
-        rooms[data.room].currentRoundTrumpSuit = "";
-        rooms[data.room].currentRound++;
-        if (
-          rooms[data.room].currentRound <= rooms[data.room].maxTrickPerRound
-        ) {
-          rooms[data.room].currentRoundNumTricks =
-            rooms[data.room].maxTrickPerRound +
-            1 -
-            rooms[data.room].currentRound;
-        } else {
-          rooms[data.room].currentRoundNumTricks =
-            rooms[data.room].currentRound - rooms[data.room].maxTrickPerRound;
-        }
-        rooms[data.room].totalGuess = 0;
-        rooms[data.room].numGuessSubmitted = 0;
-        rooms[data.room].guessForbidden = -1;
-
-        // update playersInfo for next round and broadcast to all
-        rooms[data.room].playersInfo.forEach((playerInfo) => {
-          playerInfo[rooms[data.room].currentRound] = {
-            prevCardPlayed: "",
-            cardPlayed: "",
-            guess: -1,
-            made: 0,
-            score: 0,
-          };
-        });
-        broadcastPlayersInfo(data.room, false);
-
-        // deal card for next round or complete the game
-        if (
-          rooms[data.room].currentRound <=
-          rooms[data.room].maxTrickPerRound * 2
-        ) {
-          io.sockets.to(data.room).emit("end_of_round");
-          await delay(waitTimeBetweenRounds);
-          io.sockets.to(data.room).emit("staring_new_round");
-          dealCards(data.room);
-        } else {
-          console.log("finished!");
-          rooms[data.room].lastMessage = "Game complete!";
-          io.sockets
-            .to(data.room)
-            .emit("message", rooms[data.room].lastMessage);
-          io.sockets.to(data.room).emit("end_of_game");
-        }
-      }
+      // clean up and prepare for next trick
+      finishTrick(data.room);
     }
 
-    // collect the card to be played by the next player
-    if (!rooms[data.room].currentRoundJustFinished) {
-      // only for special round
-      if (rooms[data.room].currentRoundNumTricks == 1) {
-        await delay(waitTimeBetweenTricks / rooms[data.room].numPlayers);
-      }
+    // if this is also the last trick of the current round
+    var roundInProgress =
+      rooms[data.room].currentRoundNumberTricksPlayed <
+      rooms[data.room].currentRoundNumTricks;
+    if (!roundInProgress) {
+      console.log(`[ROOM ${data.room}] current round finished`);
+      finishRound(data.room);
+      await delay(waitTimeBetweenRoundsScoreDisplay);
+    }
+
+    // if this is also the last round of the game
+    var gameInProgress =
+      rooms[data.room].currentRound <= rooms[data.room].maxTrickPerRound * 2;
+    if (!gameInProgress) {
+      finishGame(data.room);
+    }
+
+    // next step of the game for three situations
+    if (trickInProgress) {
+      console.log(`[ROOM ${data.room}] current trick continuing`);
+      await delay(waitTimeBetweenCardPlays);
       collectOnePlayedCard(data.room);
     } else {
-      rooms[data.room].currentRoundJustFinished = false;
+      if (roundInProgress) {
+        console.log(`[ROOM ${data.room}] current round continuing, next trick`);
+        startTrick(data.room);
+      } else {
+        if (gameInProgress) {
+          console.log(
+            `[ROOM ${data.room}] current game continuing, next round`
+          );
+          startRound(data.room);
+        }
+      }
     }
   });
 });
