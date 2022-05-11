@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Navbar, Container } from "react-bootstrap";
+import { Navbar, Container, Button } from "react-bootstrap";
 import { Helmet, HelmetProvider } from "react-helmet-async";
 import "./App.css";
 import io from "socket.io-client";
 import Game from "./component/Game";
 import JoinForm from "./component/JoinForm";
 import WaitRoom from "./component/WaitRoom";
+import Instruction from "./component/Instruction";
 
 // 1. local wifi network
 // const socket = io.connect("http://192.168.1.73:3001");
@@ -20,6 +21,7 @@ function App() {
   const [passcode, setPasscode] = useState("");
   const [showJoin, setShowJoin] = useState(true);
   const [showGame, setShowGame] = useState(false);
+  const [showInstruction, setShowInstruction] = useState(false);
   const joinRoom = () => {
     if (username !== "" && room !== "") {
       socket.emit("join_room", {
@@ -41,6 +43,10 @@ function App() {
 
   const passCodeOnChange = (event) => {
     setPasscode(event.target.value);
+  };
+
+  const hideInstruction = () => {
+    setShowInstruction(false);
   };
 
   useEffect(() => {
@@ -85,6 +91,19 @@ function App() {
           <Navbar.Brand>
             <h2>Oh Hell!</h2>
           </Navbar.Brand>
+          <Navbar.Toggle />
+          <Navbar.Collapse className="justify-content-end">
+            <Navbar.Text>
+              <Button
+                variant="link"
+                onClick={() => {
+                  setShowInstruction(true);
+                }}
+              >
+                how to play
+              </Button>
+            </Navbar.Text>
+          </Navbar.Collapse>
         </Container>
       </Navbar>
 
@@ -102,6 +121,8 @@ function App() {
       )}
 
       {showGame && <Game socket={socket} username={username} room={room} />}
+
+      <Instruction show={showInstruction} onHide={hideInstruction} />
     </div>
   );
 }

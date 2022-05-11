@@ -15,7 +15,7 @@
 
 .App-header {
   background-color: #2b4468;
-  min-height: 100vh;
+  min-height: 92vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -45,20 +45,6 @@
   margin-right: auto;
 }
 
-.cardPlayed-enter {
-  opacity: 0;
-  transform: scale(0.9);
-}
-.cardPlayed-enter-active {
-  opacity: 1;
-  transform: translateX(0);
-  transition: opacity 300ms, transform 300ms;
-}
-.cardPlayed-exit {
-  opacity: 1;
-}
-.cardPlayed-exit-active {
-  opacity: 0;
-  transform: scale(0.9);
-  transition: opacity 300ms, transform 300ms;
+.navbar {
+  height: 8vh;
 }
